@@ -243,7 +243,7 @@ async fn sampling_params_under_an_api_version_that_removed_them_are_refused_with
     assert_eq!(body["error"]["type"], "invalid_request_error");
     assert_eq!(
         body["error"]["message"],
-        "invalid request: test-model does not support temperature=1.0. anthropic-version \
+        "invalid request: test-model does not support temperature=1. anthropic-version \
          2026-10-21 removed temperature, top_p and top_k. To drop unsupported params, set \
          `litellm.drop_params = True`."
     );

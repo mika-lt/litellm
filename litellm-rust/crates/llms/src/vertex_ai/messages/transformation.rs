@@ -1,8 +1,10 @@
+use crate::anthropic::messages::transformation::retry_anthropic_messages_after_http_error;
 use litellm_auth::VertexParams;
 use litellm_auth_gcp::{
     VertexConfig, get_vertex_ai_location, get_vertex_ai_project,
     get_vertex_ai_project_from_credentials, secret_names,
 };
+use litellm_host::interceptors::RetriedRequest;
 use litellm_http::request::{has_header, header_value, without_headers};
 use litellm_llms_types::{
     formats::messages::{MessagesOptionalParams, MessagesRequest, MessagesTool, OutputConfig},
@@ -27,7 +29,7 @@ use crate::{
     base_llm::{
         auth::{AuthScheme, Headers, ValidatedEnvironment},
         messages::{
-            context::MessagesTransformContext,
+            context::{MessagesShapeOptions, MessagesTransformContext},
             normalization::{normalize_system_role_messages, strip_cache_control_scope},
             transformation::BaseMessagesConfig,
         },
@@ -50,12 +52,28 @@ pub const VERTEX_ANTHROPIC_MESSAGES_CONFIG: VertexAiPartnerModelsAnthropicMessag
     VertexAiPartnerModelsAnthropicMessagesConfig;
 
 impl BaseMessagesConfig for VertexAiPartnerModelsAnthropicMessagesConfig {
+    fn tool_custom_field(&self, model: &str) -> crate::base_llm::messages::tools::ToolCustomField {
+        crate::base_llm::messages::tools::ToolCustomField::Rewrite {
+            hoist_defer_loading: crate::anthropic::messages::transformation::is_claude_model(model),
+        }
+    }
+
+    fn retry_after_http_error(
+        &self,
+        status: u16,
+        error_text: &str,
+        request_body: &Value,
+        context: &MessagesTransformContext,
+    ) -> Option<RetriedRequest> {
+        retry_anthropic_messages_after_http_error(status, error_text, request_body, context)
+    }
+
     fn shape_request(
         &self,
         request: MessagesRequest,
-        reasoning_auto_summary: bool,
+        options: MessagesShapeOptions,
     ) -> Result<MessagesRequest, Error> {
-        shape_anthropic_messages_request(request, reasoning_auto_summary)
+        shape_anthropic_messages_request(request, options)
     }
 
     fn get_complete_url(
@@ -80,7 +98,7 @@ impl BaseMessagesConfig for VertexAiPartnerModelsAnthropicMessagesConfig {
         request: MessagesRequest,
         context: &MessagesTransformContext,
     ) -> Result<MessagesRequest, Error> {
-        let request = transform_messages_request(request, context)?;
+        let request = transform_messages_request(request, &context.keeping_display_updates())?;
         let request = strip_cache_control_scope(normalize_system_role_messages(
             request,
             context
@@ -622,14 +640,6 @@ mod tests {
         .unwrap()
     }
 
-    fn sampling_params(body: &MessagesRequest) -> (Option<f64>, Option<f64>, Option<i64>) {
-        (
-            body.params.temperature,
-            body.params.top_p,
-            body.params.top_k,
-        )
-    }
-
     #[rstest]
     #[case::sdk_2_under_drop_params("2026-10-21", true, (None, None, None))]
     #[case::sdk_1("2023-06-01", false, (Some(1.0), Some(0.9), Some(40)))]
@@ -644,7 +654,18 @@ mod tests {
         let body = VERTEX_ANTHROPIC_MESSAGES_CONFIG
             .request_body(sampling_request(), &headers, drop_params)
             .unwrap();
-        assert_eq!(sampling_params(&body), expected);
+        assert_eq!(
+            (
+                body.params.temperature,
+                body.params.top_p,
+                body.params.top_k
+            ),
+            (
+                expected.0.map(Recognized::Known),
+                expected.1.map(Recognized::Known),
+                expected.2.map(Recognized::Known),
+            )
+        );
     }
 
     #[rstest]
@@ -758,6 +779,7 @@ mod tests {
                     ..ThinkingContext::default()
                 },
                 drop_params: false,
+                drops_unsupported_params: false,
             },
         );
         assert_eq!(body["system"], json!("be terse"));
@@ -775,6 +797,7 @@ mod tests {
                 ..ThinkingContext::default()
             },
             drop_params: false,
+            drops_unsupported_params: false,
         }
     }
 
@@ -855,6 +878,18 @@ mod tests {
             {"type": "clear_tool_uses_20250919"}
         ]}}),
         &["compact-2026-01-12", "context-management-2025-06-27"]
+    )]
+    #[case::compaction(json!({"compaction": {"type": "summarize"}}), &["compact-2026-09-04"])]
+    #[case::thinking_display_updates(
+        json!({"thinking": {"type": "adaptive", "display": "updates"}}),
+        &["thinking-display-updates-2026-08-18"]
+    )]
+    #[case::tool_addition(
+        json!({"messages": [
+            {"role": "user", "content": "Use the ping tool"},
+            {"role": "system", "content": [{"type": "tool_addition", "tool": {"type": "tool_reference", "name": "ping"}}]}
+        ]}),
+        &["mid-conversation-tool-changes-2026-07-01"]
     )]
     #[case::advisor_tool_is_not_a_vertex_beta(
         json!({"tools": [{"type": "advisor_20260301", "name": "advisor"}]}),
