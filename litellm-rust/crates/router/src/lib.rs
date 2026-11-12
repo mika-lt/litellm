@@ -1,17 +1,14 @@
 mod deployment;
+mod sampling;
 
 use std::collections::HashMap;
 
-use litellm_auth_aws::bedrock_model_id_and_region;
 use litellm_config::{Config, Spelled};
-use litellm_core_utils::{
-    get_llm_provider_logic::{CustomLlmProvider, get_custom_llm_provider},
-    serde_compat::parse_pydantic_bool,
-    settings::Lookup,
-};
+use litellm_core_utils::{serde_compat::parse_pydantic_bool, settings::Lookup};
 use litellm_inference_messages::{MessagesModelCapabilities, MessagesSettings, MessagesShaping};
 use litellm_model_catalog::Catalog;
 use litellm_router_types::LitellmParams;
+use sampling::supports_sampling_params;
 
 pub use deployment::Deployment;
 
@@ -29,42 +26,6 @@ fn is_on(flag: Option<&Spelled<bool>>, env: &impl Lookup) -> bool {
         },
         None => false,
     }
-}
-
-fn bedrock_map_keys(resolved: &CustomLlmProvider<'_>) -> Vec<String> {
-    let on_mantle =
-        resolved.custom_llm_provider == "bedrock_mantle" || resolved.model.starts_with("mantle/");
-    if !on_mantle && resolved.custom_llm_provider != "bedrock" {
-        return Vec::new();
-    }
-    let routed = ["mantle/", "invoke/"]
-        .into_iter()
-        .find_map(|route| resolved.model.strip_prefix(route))
-        .unwrap_or(resolved.model);
-    let (model_id, _) = bedrock_model_id_and_region(routed);
-    on_mantle
-        .then(|| format!("bedrock_mantle/{model_id}"))
-        .into_iter()
-        .chain(std::iter::once(model_id))
-        .collect()
-}
-
-fn supports_sampling_params(catalog: &Catalog, params: &LitellmParams) -> bool {
-    let resolved = get_custom_llm_provider(&params.model, params.custom_llm_provider.as_deref());
-    let bedrock_keys = resolved.as_ref().map(bedrock_map_keys).unwrap_or_default();
-    std::iter::once(params.model.as_str())
-        .chain(resolved.as_ref().map(|resolved| resolved.model))
-        .chain(bedrock_keys.iter().map(String::as_str))
-        .find_map(|model| {
-            catalog
-                .lookup(model)?
-                .entry
-                .model()?
-                .capabilities
-                .get("supports_sampling_params")
-                .copied()
-        })
-        .unwrap_or(true)
 }
 
 fn additional_drop_params(params: &LitellmParams) -> Vec<String> {

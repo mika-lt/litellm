@@ -4581,6 +4581,7 @@ dependencies = [
 name = "litellm-router"
 version = "0.1.0"
 dependencies = [
+ "fancy-regex 0.19.2",
  "litellm-auth-aws",
  "litellm-config",
  "litellm-core-utils",

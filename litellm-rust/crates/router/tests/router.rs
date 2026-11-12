@@ -12,7 +12,9 @@ const MODELS: &str = r#"{
     "sampling": {"litellm_provider": "anthropic", "mode": "chat", "supports_sampling_params": true},
     "unflagged": {"litellm_provider": "anthropic", "mode": "chat"},
     "bedrock_mantle/anthropic.mantle-no-sampling": {"litellm_provider": "bedrock_mantle", "mode": "chat", "supports_sampling_params": false},
-    "us.anthropic.bedrock-no-sampling": {"litellm_provider": "bedrock_converse", "mode": "chat", "supports_sampling_params": false}
+    "us.anthropic.bedrock-no-sampling": {"litellm_provider": "bedrock_converse", "mode": "chat", "supports_sampling_params": false},
+    "us.anthropic.versioned-no-sampling-v1": {"litellm_provider": "bedrock_converse", "mode": "chat", "supports_sampling_params": false},
+    "dotted-no-sampling-4-7": {"litellm_provider": "anthropic", "mode": "chat", "supports_sampling_params": false}
 }"#;
 
 fn models() -> Catalog {
@@ -35,6 +37,20 @@ fn models() -> Catalog {
 #[case::bedrock_invoke_route("model: bedrock/invoke/us.anthropic.bedrock-no-sampling", false)]
 #[case::bedrock_region_path("model: bedrock/us-west-2/us.anthropic.bedrock-no-sampling", false)]
 #[case::bedrock_unlisted("model: bedrock/us-west-2/us.anthropic.not-in-the-map", true)]
+#[case::bedrock_version_suffix("model: bedrock/us.anthropic.bedrock-no-sampling-v1:0", false)]
+#[case::inference_profile_minor("model: bedrock/us.anthropic.versioned-no-sampling-v1:0", false)]
+#[case::dated_release("model: anthropic/no-sampling-20260416", false)]
+#[case::dotted_version("model: anthropic/dotted-no-sampling-4.7", false)]
+#[case::dated_and_versioned("model: bedrock/us.anthropic.bedrock-no-sampling-20260416-v1:0", false)]
+#[case::vertex_version("model: vertex_ai/routed-no-sampling@20260416", false)]
+#[case::bedrock_arn(
+    "model: bedrock/arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.bedrock-no-sampling",
+    false
+)]
+#[case::throughput_tier("model: bedrock/us.anthropic.versioned-no-sampling-v1:0:51k", false)]
+#[case::context_window("model: bedrock/us.anthropic.bedrock-no-sampling[1m]", false)]
+#[case::unlisted_opus_4_7("model: anthropic/claude-opus-4-7-preview", false)]
+#[case::unlisted_fable("model: bedrock/us.anthropic.claude-fable-preview", false)]
 fn sampling_support_comes_from_the_model_map(#[case] parameters: &str, #[case] expected: bool) {
     let config = Config::from_yaml(&format!(
         "model_list:\n  - model_name: public-model\n    litellm_params:\n      {parameters}"
