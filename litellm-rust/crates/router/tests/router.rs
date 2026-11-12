@@ -10,7 +10,9 @@ const MODELS: &str = r#"{
     "no-sampling": {"litellm_provider": "anthropic", "mode": "chat", "supports_sampling_params": false},
     "vertex_ai/routed-no-sampling": {"litellm_provider": "vertex_ai", "mode": "chat", "supports_sampling_params": false},
     "sampling": {"litellm_provider": "anthropic", "mode": "chat", "supports_sampling_params": true},
-    "unflagged": {"litellm_provider": "anthropic", "mode": "chat"}
+    "unflagged": {"litellm_provider": "anthropic", "mode": "chat"},
+    "bedrock_mantle/anthropic.mantle-no-sampling": {"litellm_provider": "bedrock_mantle", "mode": "chat", "supports_sampling_params": false},
+    "us.anthropic.bedrock-no-sampling": {"litellm_provider": "bedrock_converse", "mode": "chat", "supports_sampling_params": false}
 }"#;
 
 fn models() -> Catalog {
@@ -24,6 +26,15 @@ fn models() -> Catalog {
 #[case::flagged_with_sampling("model: anthropic/sampling", true)]
 #[case::unflagged("model: anthropic/unflagged", true)]
 #[case::not_in_the_map("model: anthropic/not-in-the-map", true)]
+#[case::mantle_region_path("model: bedrock_mantle/us-east-1/anthropic.mantle-no-sampling", false)]
+#[case::bedrock_mantle_route("model: bedrock/mantle/anthropic.mantle-no-sampling", false)]
+#[case::bedrock_mantle_route_region_path(
+    "model: bedrock/mantle/us-west-2/anthropic.mantle-no-sampling",
+    false
+)]
+#[case::bedrock_invoke_route("model: bedrock/invoke/us.anthropic.bedrock-no-sampling", false)]
+#[case::bedrock_region_path("model: bedrock/us-west-2/us.anthropic.bedrock-no-sampling", false)]
+#[case::bedrock_unlisted("model: bedrock/us-west-2/us.anthropic.not-in-the-map", true)]
 fn sampling_support_comes_from_the_model_map(#[case] parameters: &str, #[case] expected: bool) {
     let config = Config::from_yaml(&format!(
         "model_list:\n  - model_name: public-model\n    litellm_params:\n      {parameters}"

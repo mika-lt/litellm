@@ -6,6 +6,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+litellm-auth-aws.workspace = true
 litellm-config.workspace = true
 litellm-core-utils.workspace = true
 litellm-inference.workspace = true
