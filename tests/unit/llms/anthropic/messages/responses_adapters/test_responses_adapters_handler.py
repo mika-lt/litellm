@@ -1045,6 +1045,7 @@ async def test_additional_drop_params_tool_choice_sends_tool_search_without_the_
         pytest.param(["tools[*].defer_loading"], id="every-tool"),
         pytest.param(["tools[1].defer_loading"], id="one-tool-by-index"),
         pytest.param(("tools[*].defer_loading",), id="sdk-tuple"),
+        pytest.param(["tools[*]defer_loading"], id="no-dot-before-the-field"),
     ],
 )
 async def test_additional_drop_params_of_a_defer_loading_path_answers_400_for_tool_search_without_drop_params(
@@ -1061,6 +1062,28 @@ async def test_additional_drop_params_of_a_defer_loading_path_answers_400_for_to
 
     assert "tool_search_tool_bm25_20251119" in error.value.message
     assert not respx_mock.calls
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "additional_drop_params",
+    [
+        pytest.param(["tools[*].description"], id="another-tool-field"),
+        pytest.param(["tools[*].defer_loading.flag"], id="below-the-deferral"),
+    ],
+)
+async def test_additional_drop_params_that_keep_every_deferral_keep_tool_search(
+    respx_mock: respx.MockRouter, monkeypatch: pytest.MonkeyPatch, additional_drop_params: Sequence[str]
+):
+    upstream: Final = await _openai_request_for(
+        respx_mock,
+        monkeypatch,
+        [TOOL_SEARCH, DEFERRED_WEATHER],
+        drop_params=False,
+        additional_drop_params=additional_drop_params,
+    )
+
+    assert _tool_search_wire(upstream) == [("tool_search", None, None), ("function", "get_weather", True)]
 
 
 @pytest.mark.asyncio

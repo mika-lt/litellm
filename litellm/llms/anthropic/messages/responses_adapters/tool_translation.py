@@ -9,13 +9,13 @@ import litellm
 from litellm._logging import verbose_logger
 from litellm.exceptions import UnsupportedParamsError
 from litellm.integrations.anthropic_cache_control_hook import targets_openai_api
+from litellm.litellm_core_utils.dot_notation_indexing import parse_path_segments
 from litellm.llms.anthropic.messages.utils import json_copy_or_original
 from litellm.types.llms.anthropic import ANTHROPIC_TOOL_SEARCH_TOOL_TYPES
 from litellm.types.utils import LlmProviders
 
 _VERSIONED_TOOL_TYPE: Final = re.compile(r"(?P<family>[a-z0-9_]+?)_(?P<version>\d{8})")
 _UNVERSIONED_SERVER_TOOL_TYPES: Final = frozenset({"mcp_toolset", "computer_toolset"})
-_DEFERRAL_DROP_PATH: Final = re.compile(r"tools\[[^\]]*\]\.defer_loading")
 _DropPaths: TypeAlias = list[object] | tuple[object, ...]
 _DROP_PATHS: Final[TypeAdapter[_DropPaths]] = TypeAdapter(_DropPaths, config=ConfigDict(strict=True))
 _TEXT_EDITOR_INSERT_TEXT_SINCE: Final = "20250429"
@@ -352,7 +352,15 @@ def _drops_deferral(additional_drop_params: object) -> bool:
         paths: Final = _DROP_PATHS.validate_python(additional_drop_params)
     except ValidationError:
         return False
-    return any(isinstance(path, str) and _DEFERRAL_DROP_PATH.fullmatch(path) is not None for path in paths)
+    return any(isinstance(path, str) and _is_deferral_path(path) for path in paths)
+
+
+def _is_deferral_path(path: str) -> bool:
+    match parse_path_segments(path):
+        case ["tools", index, "defer_loading"]:
+            return index.startswith("[")
+        case _:
+            return False
 
 
 def maps_openai_tool_search(model: str, api_base: object, additional_drop_params: object) -> bool:

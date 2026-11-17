@@ -80,7 +80,7 @@ def get_nested_value(data: Mapping[str, object], key_path: str, default: T | Non
     return current if isinstance(current, type(default)) else default
 
 
-def _parse_path_segments(path: str) -> list:
+def parse_path_segments(path: str) -> list[str]:
     """
     Parse a JSONPath-like string into segments using regex.
 
@@ -96,7 +96,7 @@ def _parse_path_segments(path: str) -> list:
         List of path segments
 
     Example:
-        >>> _parse_path_segments("tools[*].arr[0].field")
+        >>> parse_path_segments("tools[*].arr[0].field")
         ["tools", "[*]", "arr", "[0]", "field"]
     """
     import re
@@ -217,7 +217,7 @@ def delete_nested_value(
 
     try:
         # Parse path into segments
-        segments: Final = _parse_path_segments(path)
+        segments: Final = parse_path_segments(path)
 
         if not segments:
             return result
@@ -235,7 +235,7 @@ def delete_nested_value(
 def delete_nested_values(data: Mapping[str, object], paths: Iterable[str]) -> Mapping[str, object]:
     result: Final = copy.deepcopy(dict(data))
     for path in dict.fromkeys(paths):
-        _delete_nested_value_custom(result, _parse_path_segments(path), 0)
+        _delete_nested_value_custom(result, parse_path_segments(path), 0)
     return result
 
 
