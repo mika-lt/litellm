@@ -931,6 +931,110 @@ class TestTranslateToolsToResponsesAPI:
         assert tools[0]["input_schema"] == {"type": "object", "properties": {"cache_control": {"type": "string"}}}
 
 
+class TestAnthropicTypedToolsOnResponses:
+    """Anthropic-defined tools carry no input_schema, so the adapter has to supply the schema Claude has built in."""
+
+    @staticmethod
+    def _only_tool(tool: Dict[str, Any]) -> Dict[str, Any]:
+        tools: Final = _ADAPTER.translate_request(_make_request(tools=[tool]))["tools"]
+        assert len(tools) == 1
+        return tools[0]
+
+    @staticmethod
+    def _enum(tool: Dict[str, Any], prop: str) -> List[str]:
+        return tool["parameters"]["properties"][prop]["enum"]
+
+    def test_bash_gets_a_command_parameter(self):
+        tool: Final = self._only_tool({"type": "bash_20250124", "name": "bash"})
+
+        assert tool["type"] == "function"
+        assert tool["name"] == "bash"
+        assert tool["strict"] is False
+        assert set(tool["parameters"]["properties"]) == {"command", "restart"}
+        assert tool["description"]
+
+    def test_text_editor_from_20250429_inserts_insert_text_and_has_no_undo(self):
+        tool: Final = self._only_tool({"type": "text_editor_20250728", "name": "str_replace_based_edit_tool"})
+
+        assert tool["name"] == "str_replace_based_edit_tool"
+        assert self._enum(tool, "command") == ["view", "create", "str_replace", "insert"]
+        assert "insert_text" in tool["parameters"]["properties"]
+        assert tool["parameters"]["required"] == ["command", "path"]
+
+    def test_text_editor_before_20250429_inserts_new_str_and_can_undo(self):
+        tool: Final = self._only_tool({"type": "text_editor_20250124", "name": "str_replace_editor"})
+
+        assert "undo_edit" in self._enum(tool, "command")
+        assert "insert_text" not in tool["parameters"]["properties"]
+        assert "new_str" in tool["parameters"]["properties"]
+
+    def test_memory_gets_every_memory_command(self):
+        tool: Final = self._only_tool({"type": "memory_20250818", "name": "memory"})
+
+        assert set(self._enum(tool, "command")) == {"view", "create", "str_replace", "insert", "delete", "rename"}
+        assert {"old_path", "new_path"} <= set(tool["parameters"]["properties"])
+
+    @pytest.mark.parametrize(
+        ("tool_type", "enable_zoom", "has_scroll", "has_zoom"),
+        [
+            ("computer_20241022", True, False, False),
+            ("computer_20250124", True, True, False),
+            ("computer_20251124", False, True, False),
+            ("computer_20251124", True, True, True),
+        ],
+    )
+    def test_computer_actions_follow_the_tool_version(
+        self, tool_type: str, enable_zoom: bool, has_scroll: bool, has_zoom: bool
+    ):
+        tool: Final = self._only_tool(
+            {
+                "type": tool_type,
+                "name": "computer",
+                "display_width_px": 1280,
+                "display_height_px": 800,
+                "enable_zoom": enable_zoom,
+            }
+        )
+        actions: Final = self._enum(tool, "action")
+        properties: Final = tool["parameters"]["properties"]
+
+        assert {"screenshot", "left_click", "type", "key"} <= set(actions)
+        assert ("scroll" in actions) is has_scroll
+        assert ("scroll_direction" in properties) is has_scroll
+        assert ("zoom" in actions) is has_zoom
+        assert ("region" in properties) is has_zoom
+        assert "1280x800" in tool["description"]
+
+    def test_custom_tool_named_like_a_typed_tool_keeps_its_own_schema(self):
+        schema: Final = {"type": "object", "properties": {"cmd": {"type": "string"}}, "required": ["cmd"]}
+
+        tool: Final = self._only_tool({"name": "bash", "input_schema": schema})
+
+        assert tool["parameters"] == schema
+        assert "description" not in tool
+
+    @pytest.mark.parametrize(
+        "tool",
+        [
+            {"type": "web_fetch_20250910", "name": "web_fetch"},
+            {"type": "code_execution_20250825", "name": "code_execution"},
+        ],
+    )
+    def test_typed_tool_with_no_client_schema_keeps_its_function_shape(self, tool: Dict[str, Any]):
+        assert self._only_tool(tool) == {"type": "function", "name": tool["name"], "strict": False}
+
+    def test_tool_choice_of_a_typed_tool_forces_its_function(self):
+        kwargs: Final = _ADAPTER.translate_request(
+            _make_request(
+                tools=[{"type": "bash_20250124", "name": "bash"}],
+                tool_choice={"type": "tool", "name": "bash"},
+            )
+        )
+
+        assert kwargs["tool_choice"] == {"type": "function", "name": "bash"}
+        assert kwargs["tools"][0]["name"] == "bash"
+
+
 # ---------------------------------------------------------------------------
 # translate_tool_choice_to_responses_api
 # ---------------------------------------------------------------------------

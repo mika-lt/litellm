@@ -28,6 +28,9 @@ from litellm.llms.anthropic.pass_through.messages.utils import (
     refusal_stop_details,
     responses_output_refusal_text,
 )
+from litellm.llms.anthropic.pass_through.responses_adapters.tool_translation import (
+    typed_client_tool,
+)
 from litellm.llms.anthropic.pass_through.utils import (
     is_reasoning_auto_summary_enabled,
     json_copy_or_original,
@@ -490,6 +493,9 @@ class LiteLLMAnthropicToResponsesAPIAdapter:
             # web_search tool
             if (isinstance(tool_type, str) and tool_type.startswith("web_search")) or tool_name == "web_search":
                 result.append({"type": "web_search_preview"})
+                continue
+            if (client_tool := typed_client_tool(tool_dict)) is not None:
+                result.append(dict(client_tool))
                 continue
             # Responses turns strict mode on when `strict` is omitted, silently rewriting
             # `required` to every property. Anthropic tools are non-strict unless asked.
