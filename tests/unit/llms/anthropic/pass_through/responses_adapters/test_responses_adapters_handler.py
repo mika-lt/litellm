@@ -742,6 +742,27 @@ def test_drop_params_keeps_mcp_servers_off_the_responses_request(
     assert responses_kwargs["input"]
 
 
+@pytest.mark.parametrize(
+    "tool_choice",
+    [{"type": "tool", "name": "web_fetch"}, {"type": "tool", "name": "bash"}, {"type": "any"}],
+    ids=["forcing-a-server-tool", "forcing-a-client-tool", "forcing-any-tool"],
+)
+def test_additional_drop_params_tools_sends_no_tool_choice_forcing_a_dropped_tool(
+    tool_choice: Mapping[str, object],
+) -> None:
+    responses_kwargs: Final = _build_responses_kwargs(
+        model="gpt-5.6",
+        extra_kwargs={**OPENAI_API, "additional_drop_params": ["tools"]},
+        max_tokens=1024,
+        messages=MESSAGES,
+        tools=[{"type": "web_fetch_20250910", "name": "web_fetch"}, {"type": "bash_20250124", "name": "bash"}],
+        tool_choice=dict(tool_choice),
+    )
+
+    assert "tools" not in responses_kwargs
+    assert "tool_choice" not in responses_kwargs
+
+
 def test_drop_params_drops_the_mcp_toolset_tools_of_dropped_mcp_servers(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(litellm, "drop_params", False)
     weather_tool: Final = {"name": "get_weather", "input_schema": {"type": "object", "properties": {}}}

@@ -215,9 +215,10 @@ def _build_responses_kwargs(
         request_data["temperature"] = temperature
     if thinking:
         request_data["thinking"] = thinking
-    if tool_choice and (request_tools or not tools):
+    drops_tools: Final = "tools" in drop_policy(forwarded_kwargs).additional_drop_params
+    if tool_choice and not drops_tools and (request_tools or not tools):
         request_data["tool_choice"] = tool_choice
-    if request_tools:
+    if request_tools and not drops_tools:
         request_data["tools"] = list(request_tools)
     if top_p is not None:
         request_data["top_p"] = top_p
